@@ -2,7 +2,7 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import axios from "axios";
 import path from "path";
-
+import "dotenv/config";
 import { GoogleGenAI, Type } from '@google/genai';
 
 async function startServer() {
@@ -147,5 +147,5 @@ ${projectsContext}
     console.log(`Server running on http://localhost:${PORT}`);
   });
 }
-
+console.log("当前读取到的 API Key 长度为:", process.env.GEMINI_API_KEY?.length || 0);
 startServer();
