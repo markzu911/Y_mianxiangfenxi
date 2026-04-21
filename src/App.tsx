@@ -29,7 +29,8 @@ export default function App() {
   const [saasUserId, setSaasUserId] = useState<string | null>(null);
   const [saasToolId, setSaasToolId] = useState<string | null>(null);
   const [saasContext, setSaasContext] = useState<string>('');
-  
+  const [integral, setIntegral] = useState<number | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const reportRef = useRef<HTMLDivElement>(null);
 
@@ -46,13 +47,20 @@ export default function App() {
           setSaasContext(event.data.context);
         }
         
-        // Launch Request (Optional but recommended by protocol, can do it silently)
+        // Launch Request
         if (event.data.userId && event.data.toolId) {
            fetch('/api/tool/launch', {
              method: 'POST',
              headers: { 'Content-Type': 'application/json' },
              body: JSON.stringify({ userId: event.data.userId, toolId: event.data.toolId })
-           }).catch(console.error);
+           })
+           .then(res => res.json())
+           .then(data => {
+             if (data?.success && data?.data?.user?.integral !== undefined) {
+               setIntegral(data.data.user.integral);
+             }
+           })
+           .catch(console.error);
         }
       }
     };
@@ -94,10 +102,11 @@ export default function App() {
           setIsAnalyzing(false);
           return;
         }
+        if (verifyData?.data?.currentIntegral !== undefined) {
+          setIntegral(verifyData.data.currentIntegral);
+        }
       } catch (err) {
         console.error("SaaS verification failed:", err);
-        // Fallback to allowing execution if the network fails to be lenient, or strict could return here.
-        // Opting for strict, let's keep going if it's not a clear error, but the prompt says 200 OK with success: true passes.
       }
     }
 
@@ -137,7 +146,14 @@ export default function App() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ userId: saasUserId, toolId: saasToolId })
-          }).catch(console.error);
+          })
+          .then(res => res.json())
+          .then(data => {
+            if (data?.success && data?.data?.currentIntegral !== undefined) {
+              setIntegral(data.data.currentIntegral);
+            }
+          })
+          .catch(console.error);
         }
       }
     } catch (err) {
@@ -185,7 +201,22 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen flex flex-col items-center py-12 px-4 sm:px-6 lg:px-8 relative">
+      {/* SaaS Integral Display */}
+      {integral !== null && (
+        <div className="absolute top-6 right-6 bg-white/80 backdrop-blur-sm px-4 py-2 rounded-full shadow-sm border border-olive/10 flex items-center gap-2 z-10 hidden sm:flex">
+          <Sparkles className="w-4 h-4 text-olive" />
+          <span className="text-sm font-medium text-olive-dark">积分余额: </span>
+          <span className="text-sm font-bold text-olive">{integral}</span>
+        </div>
+      )}
+      
+      {integral !== null && (
+        <div className="sm:hidden w-full max-w-4xl text-right mb-4 pr-2">
+           <span className="text-xs font-medium text-olive-dark bg-white/80 px-3 py-1 rounded-full border border-olive/10">积分: <span className="font-bold">{integral}</span></span>
+        </div>
+      )}
+      
       <div className="w-full max-w-4xl">
         {/* Header */}
         <div className="text-center mb-12">

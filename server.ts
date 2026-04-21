@@ -2,13 +2,27 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import axios from "axios";
 import path from "path";
-import "dotenv/config";
+import * as dotenv from "dotenv";
+dotenv.config({ override: true });
 import { GoogleGenAI, Type } from '@google/genai';
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+  // Initialize AI client only check
+  const getAI = () => {
+    const apiKey = process.env.GEMINI_API_KEY;
+    
+    // Check for missing key
+    if (!apiKey || apiKey.trim() === "" || apiKey === "MY_GEMINI_API_KEY") {
+      const errorMsg = "GEMINI_API_KEY 缺失或无效。请确保根目录下的 .env 文件中已配置正确的 Key。";
+      console.error(`❌ ERROR: ${errorMsg} (当前值: ${apiKey?.substring(0, 4)}****)`);
+      throw new Error(errorMsg);
+    }
+    
+    return new GoogleGenAI({ apiKey });
+  };
 
   app.use(express.json({ limit: '10mb' }));
 
@@ -52,6 +66,7 @@ async function startServer() {
         return res.status(400).json({ error: 'Missing image data' });
       }
 
+      const ai = getAI();
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: [
@@ -147,5 +162,20 @@ ${projectsContext}
     console.log(`Server running on http://localhost:${PORT}`);
   });
 }
-console.log("当前读取到的 API Key 长度为:", process.env.GEMINI_API_KEY?.length || 0);
+console.log("🚀 服务器正在启动...");
+const rawKey = process.env.GEMINI_API_KEY;
+const isPlaceholder = rawKey === "MY_GEMINI_API_KEY";
+const keyLength = rawKey ? rawKey.length : 0;
+
+if (!rawKey || isPlaceholder || rawKey.trim() === "") {
+  console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+  console.error("🔴 致命错误: GEMINI_API_KEY 未能正确加载！");
+  console.error(`当前状态: ${rawKey ? "已设置但无效" : "未设置"}`);
+  console.error("解决方案:");
+  console.error("1. 请检查根目录下的 .env 文件，确保其包含: GEMINI_API_KEY=您的密钥");
+  console.error("2. 或者在 AI Studio 的 Secrets 面板中设置 GEMINI_API_KEY");
+  console.error("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+} else {
+  console.log(`✅ GEMINI_API_KEY 已就绪 (来源: .env 或系统环境, 长度: ${keyLength})`);
+}
 startServer();

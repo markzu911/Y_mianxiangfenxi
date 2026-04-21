@@ -7,7 +7,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(405).json({ error: 'Method Not Allowed' });
   }
 
-  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey === "MY_GEMINI_API_KEY") {
+    return res.status(500).json({ error: "Missing or invalid GEMINI_API_KEY in environment" });
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
   const { imageBase64, mimeType, extraContextPrompt, projectsContext } = req.body;
 
   if (!imageBase64 || !mimeType) {
