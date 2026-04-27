@@ -327,7 +327,7 @@ export default function App() {
                   <div className="flex flex-col md:flex-row gap-12 mb-12">
                     {/* Photo & Summary */}
                     <div className="w-full md:w-1/3 flex flex-col items-center">
-                      <img src={image} alt="Analyzed face" className="w-48 h-64 object-cover rounded-none grayscale shadow-none mb-6 border border-zinc-200" />
+                      <img src={image} alt="Analyzed face" className="w-48 h-64 object-cover rounded-none shadow-none mb-6 border border-zinc-200" />
                     </div>
                     
                     <div className="w-full md:w-2/3 flex flex-col justify-center">
