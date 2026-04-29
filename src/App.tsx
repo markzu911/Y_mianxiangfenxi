@@ -72,15 +72,47 @@ export default function App() {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Basic size check for the raw file
       if (file.size > 20 * 1024 * 1024) {
-        setError("图片大小超过 20MB，请压缩后重新上传。");
+        setError("图片文件过大，请选择 20MB 以内的图片。");
         return;
       }
+
       const reader = new FileReader();
       reader.onloadend = () => {
-        setImage(reader.result as string);
-        setResult(null);
-        setError(null);
+        const img = new Image();
+        img.src = reader.result as string;
+        img.onload = () => {
+          // Client-side resizing to ensure we don't hit 413 or slow down the AI
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          const maxDimension = 1600;
+
+          if (width > height) {
+            if (width > maxDimension) {
+              height = Math.round((height * maxDimension) / width);
+              width = maxDimension;
+            }
+          } else {
+            if (height > maxDimension) {
+              width = Math.round((width * maxDimension) / height);
+              height = maxDimension;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            // Compress as JPEG even if source was PNG to save space
+            const compressedBase64 = canvas.toDataURL('image/jpeg', 0.85);
+            setImage(compressedBase64);
+            setResult(null);
+            setError(null);
+          }
+        };
       };
       reader.readAsDataURL(file);
     }
