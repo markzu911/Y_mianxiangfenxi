@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Camera, Loader2, RefreshCcw, Sparkles, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { toPng } from 'html-to-image';
@@ -72,6 +72,10 @@ export default function App() {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      if (file.size > 20 * 1024 * 1024) {
+        setError("图片大小超过 20MB，请压缩后重新上传。");
+        return;
+      }
       const reader = new FileReader();
       reader.onloadend = () => {
         setImage(reader.result as string);
@@ -245,7 +249,7 @@ export default function App() {
                 >
                   <Camera className="w-12 h-12 text-olive mb-4" strokeWidth={1.5} />
                   <span className="text-olive-dark font-medium">点击上传正面照</span>
-                  <span className="text-sm text-olive/60 mt-2">支持 JPG, PNG</span>
+                  <span className="text-sm text-olive/60 mt-2">支持 JPG, PNG，最大 20MB</span>
                 </div>
                 <input 
                   type="file" 

@@ -1,3 +1,10 @@
+export interface BeautyProject {
+  name: string;
+  category: string;
+  description: string;
+  fengshuiBenefit: string;
+}
+
 export const beautyProjects: BeautyProject[] = [
   {
     name: "开运招财眉 / 丝雾眉",

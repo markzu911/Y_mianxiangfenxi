@@ -24,7 +24,7 @@ async function startServer() {
     return new GoogleGenAI({ apiKey });
   };
 
-  app.use(express.json({ limit: '10mb' }));
+  app.use(express.json({ limit: '20mb' }));
 
   app.use((req, res, next) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
