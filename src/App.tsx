@@ -249,13 +249,13 @@ export default function App() {
                 >
                   <Camera className="w-12 h-12 text-olive mb-4" strokeWidth={1.5} />
                   <span className="text-olive-dark font-medium">点击上传正面照</span>
-                  <span className="text-sm text-olive/60 mt-2">支持 JPG, PNG，最大 20MB</span>
+                  <span className="text-sm text-olive/60 mt-2">支持 JPG, PNG, WebP, BMP 等常见格式，最大 20MB</span>
                 </div>
                 <input 
                   type="file" 
                   ref={fileInputRef} 
                   onChange={handleImageUpload} 
-                  accept="image/*" 
+                  accept="image/jpeg,image/png,image/webp,image/bmp,image/heic,image/heif" 
                   className="hidden" 
                 />
               </motion.div>
