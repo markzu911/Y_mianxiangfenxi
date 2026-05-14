@@ -2,7 +2,11 @@
   "version": 2,
   "rewrites": [
     {
-      "source": "/api/(.*)",
+      "source": "/api/tool/:path*",
+      "destination": "/api/proxy"
+    },
+    {
+      "source": "/api/upload/:path*",
       "destination": "/api/proxy"
     },
     {

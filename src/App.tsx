@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Camera, Loader2, RefreshCcw, Sparkles, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { toJpeg } from 'html-to-image';
+import { toJpeg, toBlob } from 'html-to-image';
 import { beautyProjects } from './lib/beautyProjects';
 
 interface AnalysisResult {
@@ -44,15 +44,13 @@ export default function App() {
       hasUploadedRef.current = true;
       const timer = setTimeout(async () => {
         try {
-          const imageBase64 = await toJpeg(reportRef.current!, {
+          const blob = await toBlob(reportRef.current!, {
              quality: 0.85,
-             pixelRatio: 1, // Keep string length short to avoid 413
+             pixelRatio: window.devicePixelRatio > 1 ? 2 : 1, // We can use high quality now since it's a blob
              backgroundColor: '#f5f5f0'
           });
 
-          // Convert to Blob
-          const resBlob = await fetch(imageBase64);
-          const blob = await resBlob.blob();
+          if (!blob) throw new Error("Failed to generate blob from report");
 
           // 1. Get token
           const tokenRes = await fetch('/api/upload/direct-token', {
