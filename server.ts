@@ -62,67 +62,6 @@ async function startServer() {
   app.post("/api/upload/direct-token", (req, res) => proxyRequest(req, res, "/api/upload/direct-token"));
   app.post("/api/upload/commit", (req, res) => proxyRequest(req, res, "/api/upload/commit"));
 
-  app.post("/api/upload-result", express.raw({ limit: '50mb', type: ['image/jpeg', 'image/png', 'application/octet-stream'] }), async (req, res) => {
-    try {
-      const { userId, toolId } = req.query;
-      if (!userId || !toolId) {
-        return res.status(400).json({ success: false, error: 'Missing userId or toolId' });
-      }
-
-      const imageBuffer = req.body;
-      if (!Buffer.isBuffer(imageBuffer) || imageBuffer.length === 0) {
-        return res.status(400).json({ success: false, error: 'Request body must be binary image data' });
-      }
-
-      const SAAS_ORIGIN = process.env.SAAS_ORIGIN || 'https://aibigtree.com';
-      
-      // 1. direct-token
-      const tokenRes = await axios.post(`${SAAS_ORIGIN}/api/upload/direct-token`, {
-        userId,
-        toolId,
-        source: 'result',
-        mimeType: 'image/jpeg',
-        fileName: 'report.jpg',
-        fileSize: imageBuffer.byteLength
-      });
-      
-      const token = tokenRes.data;
-      if (!token || !token.success) {
-         throw new Error(token?.error || "获取 token 失败");
-      }
-
-      // 2. PUT to OSS
-      const uploadRes = await fetch(token.uploadUrl, {
-        method: token.method || 'PUT',
-        headers: token.headers,
-        body: imageBuffer
-      });
-      
-      if (!uploadRes.ok) {
-         throw new Error(`OSS 上传失败: ${uploadRes.status}`);
-      }
-
-      // 3. commit
-      const commitRes = await axios.post(`${SAAS_ORIGIN}/api/upload/commit`, {
-        userId,
-        toolId,
-        source: 'result',
-        objectKey: token.objectKey,
-        fileSize: imageBuffer.byteLength
-      });
-
-      const commit = commitRes.data;
-      if (!commit.success || !commit.savedToRecords) {
-        throw new Error(commit.error || '图片入库失败');
-      }
-
-      res.json({ success: true, image: commit.image });
-    } catch (error: any) {
-      console.error("Upload Result Error:", error.response?.data || error.message);
-      res.status(500).json({ success: false, error: error.message || "上传失败" });
-    }
-  });
-
   app.post("/api/generate", async (req, res) => {
     try {
       const { imageBase64, mimeType, extraContextPrompt, projectsContext, userId, toolId } = req.body;
@@ -130,7 +69,7 @@ async function startServer() {
         return res.status(400).json({ error: 'Missing image data' });
       }
 
-      const SAAS_ORIGIN = process.env.SAAS_ORIGIN || 'https://aibigtree.com';
+      const SAAS_ORIGIN = process.env.SAAS_ORIGIN || 'http://aibigtree.com';
 
       // 1. Verify points if SaaS info is provided
       if (userId && toolId) {
