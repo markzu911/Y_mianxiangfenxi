@@ -67,7 +67,7 @@ async function startServer() {
         return res.status(400).json({ success: false, error: 'Missing parameters' });
       }
 
-      const SAAS_ORIGIN = 'http://aibigtree.com';
+      const SAAS_ORIGIN = process.env.SAAS_ORIGIN || 'https://aibigtree.com';
       const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
       const imageBuffer = Buffer.from(base64Data, 'base64');
       
@@ -125,7 +125,7 @@ async function startServer() {
         return res.status(400).json({ error: 'Missing image data' });
       }
 
-      const SAAS_ORIGIN = 'http://aibigtree.com';
+      const SAAS_ORIGIN = process.env.SAAS_ORIGIN || 'https://aibigtree.com';
 
       // 1. Verify points if SaaS info is provided
       if (userId && toolId) {

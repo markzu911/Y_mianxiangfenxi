@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Camera, Loader2, RefreshCcw, Sparkles, Download } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { toPng } from 'html-to-image';
+import { toJpeg } from 'html-to-image';
 import { beautyProjects } from './lib/beautyProjects';
 
 interface AnalysisResult {
@@ -44,9 +44,9 @@ export default function App() {
       hasUploadedRef.current = true;
       const timer = setTimeout(async () => {
         try {
-          const imageBase64 = await toPng(reportRef.current!, {
+          const imageBase64 = await toJpeg(reportRef.current!, {
              quality: 0.85,
-             pixelRatio: window.devicePixelRatio > 1 ? 2 : 1,
+             pixelRatio: 1, // Keep string length short to avoid 413
              backgroundColor: '#f5f5f0'
           });
 
@@ -230,9 +230,9 @@ export default function App() {
     if (!reportRef.current) return;
     setIsExporting(true);
     try {
-      const url = await toPng(reportRef.current, {
-        quality: 1,
-        pixelRatio: 2,
+      const url = await toJpeg(reportRef.current, {
+        quality: 0.95,
+        pixelRatio: window.devicePixelRatio > 1 ? 2 : 1,
         backgroundColor: '#f5f5f0',
         filter: (node) => {
           if (hidePitchInExport && node instanceof HTMLElement && node.id === 'beautician-pitch') {
@@ -242,7 +242,7 @@ export default function App() {
         }
       });
       const link = document.createElement('a');
-      link.download = `面相解析报告_${new Date().getTime()}.png`;
+      link.download = `面相解析报告_${new Date().getTime()}.jpg`;
       link.href = url;
       link.click();
     } catch (err) {
