@@ -31,6 +31,11 @@ export default function App() {
   const [saasContext, setSaasContext] = useState<string>('');
   const [integral, setIntegral] = useState<number | null>(null);
 
+  const [isUploadingReport, setIsUploadingReport] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<"idle" | "waiting_saas" | "uploading" | "success" | "failed">("idle");
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadedImageInfo, setUploadedImageInfo] = useState<any | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const reportRef = useRef<HTMLDivElement>(null);
   const hasUploadedRef = useRef(false);
@@ -40,11 +45,47 @@ export default function App() {
   }, [result]);
 
   useEffect(() => {
-    if (result && !isAnalyzing && reportRef.current && saasUserId && saasToolId && !hasUploadedRef.current) {
-      hasUploadedRef.current = true;
-      const timer = setTimeout(async () => {
+    if (result && !isAnalyzing && !hasUploadedRef.current) {
+      if (!saasUserId || !saasToolId) {
+        console.warn("[upload] Missing SaaS credentials. Cannot upload.", { resultExists: !!result, saasUserId, saasToolId });
+        setUploadStatus("waiting_saas");
+        setUploadError("未获取到 SaaS 用户信息，无法保存报告图，请检查平台是否传入 userId/toolId。");
+        return;
+      }
+
+      let retryCount = 0;
+
+      const attemptUpload = async () => {
+        if (!reportRef.current) {
+          if (retryCount < 3) {
+            retryCount++;
+            setTimeout(attemptUpload, 500);
+            return;
+          }
+          setUploadStatus("failed");
+          setUploadError("报告内容尚未渲染完成，无法生成报告图");
+          return;
+        }
+
+        hasUploadedRef.current = true;
+        setUploadStatus("uploading");
+        setUploadError(null);
+        setIsUploadingReport(true);
+
+        console.log("[upload] conditions", {
+          hasResult: !!result,
+          isAnalyzing,
+          hasReportRef: !!reportRef.current,
+          saasUserId,
+          saasToolId,
+          hasUploaded: hasUploadedRef.current
+        });
+
         try {
-          const imageBase64 = await toJpeg(reportRef.current!, {
+          // Delay briefly to allow images/fonts to render
+          await new Promise(res => setTimeout(res, 800));
+
+          const imageBase64 = await toJpeg(reportRef.current, {
              quality: 0.85,
              pixelRatio: window.devicePixelRatio > 1 ? 2 : 1,
              backgroundColor: '#f5f5f0'
@@ -53,7 +94,12 @@ export default function App() {
           const resBlob = await fetch(imageBase64);
           const blob = await resBlob.blob();
 
-          if (!blob) throw new Error("Failed to generate blob from report");
+          console.log("[upload] report blob", {
+            size: blob?.size,
+            type: blob?.type
+          });
+
+          if (!blob || blob.size === 0) throw new Error("Failed to generate blob from report (size is 0)");
 
           // 1. Get token
           const tokenRes = await fetch('/api/upload/direct-token', {
@@ -68,9 +114,17 @@ export default function App() {
                  fileSize: blob.size
              })
           });
+
+          if (!tokenRes.ok) {
+            const errText = await tokenRes.text();
+            throw new Error(`获取上传地址请求失败: ${tokenRes.status} ${errText}`);
+          }
+
           const tokenData = await tokenRes.json();
-          if (!tokenData.success) {
-            throw new Error(tokenData.error || tokenData.message || '获取上传地址失败');
+          console.log("[upload] direct-token response", tokenData);
+
+          if (!tokenData || !tokenData.success || !tokenData.uploadUrl || !tokenData.objectKey) {
+            throw new Error(tokenData?.error || tokenData?.message || '获取上传地址失败，缺少 uploadUrl 或 objectKey');
           }
 
           // 2. PUT OSS
@@ -99,45 +153,124 @@ export default function App() {
                  fileSize: blob.size
              })
           });
-          const commitData = await commitRes.json();
-          if (!commitData.success || !commitData.savedToRecords) {
-            throw new Error(commitData.error || '上传确认失败');
+          
+          if (!commitRes.ok) {
+            const errText = await commitRes.text();
+            throw new Error(`上传确认请求失败: ${commitRes.status} ${errText}`);
           }
-          console.log("Image saved to SaaS successfully");
 
-        } catch (e) {
+          const commitData = await commitRes.json();
+          console.log("[upload] commit response", commitData);
+
+          if (!commitData || !commitData.success || !commitData.savedToRecords || (!commitData.recordId && !commitData.image?.recordId)) {
+            throw new Error(commitData?.error || '上传确认失败，缺少最终图片信息');
+          }
+          
+          setUploadStatus("success");
+          setUploadError(null);
+          setUploadedImageInfo(commitData.image || commitData);
+          console.log("Report image saved to SaaS successfully", commitData);
+
+        } catch (e: any) {
           console.error("Auto upload failed", e);
+          setUploadStatus("failed");
+          setUploadError(e.message || "报告图保存失败");
           hasUploadedRef.current = false;
+        } finally {
+          setIsUploadingReport(false);
         }
-      }, 800); // Slight delay for fonts/images to fully render
-      return () => clearTimeout(timer);
+      };
+
+      attemptUpload();
     }
   }, [result, isAnalyzing, saasUserId, saasToolId]);
 
   useEffect(() => {
+    let currentUserId = saasUserId;
+    let currentToolId = saasToolId;
+
+    // 1. Try URL parameters first
+    const params = new URLSearchParams(window.location.search);
+    const queryUserId = params.get('userId');
+    const queryToolId = params.get('toolId');
+    
+    if (queryUserId && queryUserId !== "null" && queryUserId !== "undefined") {
+      setSaasUserId(queryUserId);
+      currentUserId = queryUserId;
+    }
+    if (queryToolId && queryToolId !== "null" && queryToolId !== "undefined") {
+      setSaasToolId(queryToolId);
+      currentToolId = queryToolId;
+    }
+
+    // 2. Fallback to localStorage/sessionStorage
+    if (!currentUserId || !currentToolId) {
+      const storedUserId = localStorage.getItem('saasUserId') || sessionStorage.getItem('saasUserId');
+      const storedToolId = localStorage.getItem('saasToolId') || sessionStorage.getItem('saasToolId');
+      
+      if (storedUserId && storedUserId !== "null" && storedUserId !== "undefined") {
+        setSaasUserId(storedUserId);
+        currentUserId = storedUserId;
+      }
+      if (storedToolId && storedToolId !== "null" && storedToolId !== "undefined") {
+        setSaasToolId(storedToolId);
+        currentToolId = storedToolId;
+      }
+    }
+
+    if (currentUserId && currentToolId) {
+      console.log("[SaaS Init] Parsed from URL/Storage:", { userId: currentUserId, toolId: currentToolId });
+      // Launch Request for URL/Storage cases
+      fetch('/api/tool/launch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: currentUserId, toolId: currentToolId })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data?.success && data?.data?.user?.integral !== undefined) {
+          setIntegral(data.data.user.integral);
+        }
+      })
+      .catch(console.error);
+    }
+
     const handleMessage = (event: MessageEvent) => {
-      if (event.data?.type === 'SAAS_INIT') {
-        if (event.data.userId && event.data.userId !== "null" && event.data.userId !== "undefined") {
-          setSaasUserId(event.data.userId);
+      // 3. Listen to window message
+      const data = event.data;
+      if (data?.type === 'SAAS_INIT' || (data && data.userId && data.toolId)) {
+        let evUserId = data.userId;
+        let evToolId = data.toolId;
+
+        if (evUserId && evUserId !== "null" && evUserId !== "undefined") {
+          setSaasUserId(evUserId);
+          localStorage.setItem('saasUserId', evUserId);
         }
-        if (event.data.toolId && event.data.toolId !== "null" && event.data.toolId !== "undefined") {
-          setSaasToolId(event.data.toolId);
+        if (evToolId && evToolId !== "null" && evToolId !== "undefined") {
+          setSaasToolId(evToolId);
+          localStorage.setItem('saasToolId', evToolId);
         }
-        if (event.data.context) {
-          setSaasContext(event.data.context);
+        if (data.context) {
+          setSaasContext(data.context);
         }
         
+        console.log("[SaaS Init] Parsed from Message:", { 
+          userId: evUserId, 
+          toolId: evToolId, 
+          context: data.context 
+        });
+        
         // Launch Request
-        if (event.data.userId && event.data.toolId) {
+        if (evUserId && evToolId && evUserId !== "null" && evToolId !== "null") {
            fetch('/api/tool/launch', {
              method: 'POST',
              headers: { 'Content-Type': 'application/json' },
-             body: JSON.stringify({ userId: event.data.userId, toolId: event.data.toolId })
+             body: JSON.stringify({ userId: evUserId, toolId: evToolId })
            })
            .then(res => res.json())
-           .then(data => {
-             if (data?.success && data?.data?.user?.integral !== undefined) {
-               setIntegral(data.data.user.integral);
+           .then(resData => {
+             if (resData?.success && resData?.data?.user?.integral !== undefined) {
+               setIntegral(resData.data.user.integral);
              }
            })
            .catch(console.error);
@@ -495,6 +628,30 @@ export default function App() {
 
                 {/* Actions (Outside Report) */}
                 <div className="flex flex-col items-center gap-5 sm:gap-6 mt-6 sm:mt-8 w-full px-2">
+                  
+                  {/* UPLOAD STATUS DISPLAY */}
+                  {uploadStatus === "uploading" && (
+                     <div className="text-sm text-olive flex items-center gap-2">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>正在自动保存报告图到您的相册...</span>
+                     </div>
+                  )}
+                  {uploadStatus === "failed" && uploadError && (
+                     <div className="text-sm text-red-500 bg-red-50 px-4 py-2 rounded-xl border border-red-100 text-center max-w-lg">
+                        <p>{uploadError}</p>
+                     </div>
+                  )}
+                  {uploadStatus === "waiting_saas" && uploadError && (
+                     <div className="text-sm text-amber-600 bg-amber-50 px-4 py-2 rounded-xl border border-amber-200 text-center max-w-lg">
+                        <p>{uploadError}</p>
+                     </div>
+                  )}
+                  {uploadStatus === "success" && (
+                     <div className="text-sm text-green-600 flex items-center gap-2 bg-green-50 px-4 py-2 rounded-xl border border-green-200">
+                        <span>✓ 报告图已成功保存到您的相册</span>
+                     </div>
+                  )}
+
                   <label className="flex items-center gap-3 text-xs sm:text-sm text-olive-dark cursor-pointer bg-olive/5 px-4 py-2.5 rounded-xl sm:rounded-full border border-olive/10 hover:bg-olive/10 transition-colors w-full sm:w-auto text-center sm:text-left">
                     <input 
                       type="checkbox" 
