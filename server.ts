@@ -40,7 +40,7 @@ async function startServer() {
   });
 
   const proxyRequest = async (req: express.Request, res: express.Response, targetPath: string) => {
-    const targetUrl = `http://aibigtree.com${targetPath}`;
+    const targetUrl = `https://aibigtree.com${targetPath}`;
     try {
       const response = await axios({
         method: req.method,
@@ -49,9 +49,9 @@ async function startServer() {
         headers: { 'Content-Type': 'application/json' }
       });
       res.status(response.status).json(response.data);
-    } catch (error) {
-      console.error(`Proxy error to ${targetPath}:`, error);
-      res.status(500).json({ error: "代理转发失败" });
+    } catch (error: any) {
+      console.error(`Proxy error to ${targetPath}:`, error.response?.data || error.message);
+      res.status(error.response?.status || 500).json(error.response?.data || { error: "代理转发失败" });
     }
   };
 
@@ -68,13 +68,16 @@ async function startServer() {
         return res.status(400).json({ error: 'Missing required parameters' });
       }
 
-      const SAAS_ORIGIN = "http://aibigtree.com";
+      const SAAS_ORIGIN = "https://aibigtree.com";
       const imageBuffer = Buffer.from(imageBase64, 'base64');
       const fileName = `report_${Date.now()}.png`;
       const mimeType = "image/png";
 
+      console.log(`[UploadReport] Starting process for user: ${userId}, tool: ${toolId}`);
+
       // 1. Consume
       const consumeRes = await axios.post(`${SAAS_ORIGIN}/api/tool/consume`, { userId, toolId });
+      console.log(`[UploadReport] Consume response:`, consumeRes.data);
       if (!consumeRes.data.success) {
         throw new Error(consumeRes.data.error || consumeRes.data.message || '扣费失败');
       }
@@ -89,14 +92,20 @@ async function startServer() {
         fileSize: imageBuffer.length
       });
       const token = tokenRes.data;
+      console.log(`[UploadReport] Token response:`, token);
       if (!token.success) {
         throw new Error(token.error || '获取直传 Token 失败');
       }
 
       // 3. PUT to OSS
+      // IMPORTANT: Must use the headers provided by the direct-token response
       await axios.put(token.uploadUrl, imageBuffer, {
-        headers: { 'Content-Type': mimeType }
+        headers: { 
+          ...token.headers,
+          'Content-Type': mimeType 
+        }
       });
+      console.log(`[UploadReport] Successfully PUT to OSS`);
 
       // 4. Commit
       const commitRes = await axios.post(`${SAAS_ORIGIN}/api/upload/commit`, {
@@ -106,6 +115,7 @@ async function startServer() {
         objectKey: token.objectKey,
         fileSize: imageBuffer.length
       });
+      console.log(`[UploadReport] Commit response:`, commitRes.data);
 
       if (!commitRes.data.success || !commitRes.data.savedToRecords) {
         throw new Error(commitRes.data.error || '图片入库失败');

@@ -18,7 +18,7 @@ app.use((req, res, next) => {
 });
 
 const proxyRequest = async (req: express.Request, res: express.Response, targetPath: string) => {
-  const targetUrl = `http://aibigtree.com${targetPath}`;
+  const targetUrl = `https://aibigtree.com${targetPath}`;
   try {
     const response = await axios({
       method: req.method,
@@ -27,8 +27,9 @@ const proxyRequest = async (req: express.Request, res: express.Response, targetP
       headers: { 'Content-Type': 'application/json' }
     });
     res.status(response.status).json(response.data);
-  } catch (error) {
-    res.status(500).json({ error: "代理转发失败" });
+  } catch (error: any) {
+    console.error(`Proxy error to ${targetPath}:`, error.response?.data || error.message);
+    res.status(error.response?.status || 500).json(error.response?.data || { error: "代理转发失败" });
   }
 };
 
