@@ -19,7 +19,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(400).json({ error: 'Missing image data' });
   }
 
-  const SAAS_ORIGIN = 'http://aibigtree.com';
+  const SAAS_ORIGIN = 'https://aibigtree.com';
   const axios = (await import('axios')).default;
 
   try {

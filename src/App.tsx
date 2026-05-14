@@ -55,55 +55,23 @@ export default function App() {
 
           if (!blob) throw new Error("Failed to generate blob from report");
 
-          // 1. Get token
-          const tokenRes = await fetch('/api/upload/direct-token', {
+          // Call backend interface
+          const uploadRes = await fetch(`/api/upload-result?userId=${encodeURIComponent(saasUserId)}&toolId=${encodeURIComponent(saasToolId)}`, {
              method: 'POST',
-             headers: { 'Content-Type': 'application/json' },
-             body: JSON.stringify({
-                 userId: saasUserId,
-                 toolId: saasToolId,
-                 source: 'result',
-                 mimeType: 'image/jpeg',
-                 fileName: 'report.jpg',
-                 fileSize: blob.size
-             })
+             headers: { 'Content-Type': 'image/jpeg' },
+             body: blob,
           });
-          const tokenData = await tokenRes.json();
-          if (!tokenData.success) {
-            throw new Error(tokenData.error || tokenData.message || '获取上传地址失败');
-          }
-
-          // 2. PUT OSS
-          const uploadRes = await fetch(tokenData.uploadUrl, {
-            method: tokenData.method || 'PUT',
-            headers: {
-              ...tokenData.headers,
-              // Required to override any global fetch headers for standard OSS PUT
-              'Content-Type': tokenData.headers?.['Content-Type'] || 'image/jpeg' 
-            },
-            body: blob
-          });
+          
           if (!uploadRes.ok) {
-            throw new Error(`OSS上传失败: ${uploadRes.status}`);
+            const errorText = await uploadRes.text();
+            throw new Error(`请求失败: ${uploadRes.status} ${errorText}`);
           }
 
-          // 3. Commit
-          const commitRes = await fetch('/api/upload/commit', {
-             method: 'POST',
-             headers: { 'Content-Type': 'application/json' },
-             body: JSON.stringify({
-                 userId: saasUserId,
-                 toolId: saasToolId,
-                 source: 'result',
-                 objectKey: tokenData.objectKey,
-                 fileSize: blob.size
-             })
-          });
-          const commitData = await commitRes.json();
-          if (!commitData.success || !commitData.savedToRecords) {
-            throw new Error(commitData.error || '上传确认失败');
+          const uploadData = await uploadRes.json();
+          if (!uploadData.success) {
+            throw new Error(uploadData.error || '上传后端失败');
           }
-          console.log("Image saved to SaaS successfully");
+          console.log("Image saved to SaaS successfully via backend");
 
         } catch (e) {
           console.error("Auto upload failed", e);
