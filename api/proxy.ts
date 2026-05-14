@@ -18,7 +18,7 @@ app.use((req, res, next) => {
 });
 
 const proxyRequest = async (req: express.Request, res: express.Response, targetPath: string) => {
-  const targetUrl = `https://aibigtree.com${targetPath}`;
+  const targetUrl = `http://aibigtree.com${targetPath}`;
   try {
     const response = await axios({
       method: req.method,
@@ -27,16 +27,13 @@ const proxyRequest = async (req: express.Request, res: express.Response, targetP
       headers: { 'Content-Type': 'application/json' }
     });
     res.status(response.status).json(response.data);
-  } catch (error: any) {
-    console.error(`Proxy error to ${targetPath}:`, error.response?.data || error.message);
-    res.status(error.response?.status || 500).json(error.response?.data || { error: "代理转发失败" });
+  } catch (error) {
+    res.status(500).json({ error: "代理转发失败" });
   }
 };
 
 app.post("/api/tool/launch", (req, res) => proxyRequest(req, res, "/api/tool/launch"));
 app.post("/api/tool/verify", (req, res) => proxyRequest(req, res, "/api/tool/verify"));
 app.post("/api/tool/consume", (req, res) => proxyRequest(req, res, "/api/tool/consume"));
-app.post("/api/upload/direct-token", (req, res) => proxyRequest(req, res, "/api/upload/direct-token"));
-app.post("/api/upload/commit", (req, res) => proxyRequest(req, res, "/api/upload/commit"));
 
 export default app;

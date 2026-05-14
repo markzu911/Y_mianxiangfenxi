@@ -175,7 +175,22 @@ export default function App() {
         setError(data.invalidReason || "未检测到有效的人脸，请重新上传清晰的正面人脸照片。");
       } else {
         setResult(data);
-        // Automatic upload logic triggered by result state
+        
+        // SaaS Consume Integration
+        if (saasUserId && saasToolId) {
+          fetch('/api/tool/consume', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: saasUserId, toolId: saasToolId })
+          })
+          .then(res => res.json())
+          .then(data => {
+            if (data?.success && data?.data?.currentIntegral !== undefined) {
+              setIntegral(data.data.currentIntegral);
+            }
+          })
+          .catch(console.error);
+        }
       }
     } catch (err) {
       console.error(err);
@@ -184,55 +199,6 @@ export default function App() {
       setIsAnalyzing(false);
     }
   };
-
-  // Automatic Report Upload Logic
-  useEffect(() => {
-    const uploadReport = async () => {
-      if (result && saasUserId && saasToolId && reportRef.current) {
-        // Wait for rendering
-        await new Promise(resolve => setTimeout(resolve, 800));
-        
-        try {
-          const url = await toPng(reportRef.current, {
-            quality: 0.9,
-            pixelRatio: 1.5, // Slightly lower for faster upload
-            backgroundColor: '#f5f5f0',
-            filter: (node) => {
-              // Always show pitch in the SaaS preserved image (marketing copy)
-              return true;
-            }
-          });
-
-          const base64 = url.split(',')[1];
-          
-          const response = await fetch('/api/upload-report', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              imageBase64: base64,
-              userId: saasUserId,
-              toolId: saasToolId
-            })
-          });
-          
-          const data = await response.json();
-          if (data.success) {
-            console.log("Report uploaded and saved:", data.image.url);
-            // Update integral after backend consume
-            if (data.image?.currentIntegral !== undefined) {
-               setIntegral(data.image.currentIntegral);
-            }
-          }
-        } catch (err) {
-          console.error("Auto upload failed:", err);
-        }
-      }
-    };
-
-    if (result) {
-      uploadReport();
-    }
-  }, [result, saasUserId, saasToolId]);
 
   const reset = () => {
     setImage(null);
