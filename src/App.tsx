@@ -52,21 +52,18 @@ export default function App() {
 
           if (!blob) throw new Error("Failed to generate blob from report");
 
-          // Upload to our backend using blob
+          // Call backend interface
           const uploadRes = await fetch(`/api/upload-result?userId=${saasUserId}&toolId=${saasToolId}`, {
              method: 'POST',
-             body: blob
+             headers: { 'Content-Type': 'image/jpeg' },
+             body: blob,
           });
           
-          if (!uploadRes.ok) {
-             throw new Error(`Upload API returned ${uploadRes.status}`);
+          const uploadData = await uploadRes.json();
+          if (!uploadData.success) {
+            throw new Error(uploadData.error || '上传后端失败');
           }
-          
-          const resultData = await uploadRes.json();
-          if (!resultData.success) {
-             throw new Error(resultData.error || '上传确认失败');
-          }
-          console.log("Image saved to SaaS successfully");
+          console.log("Image saved to SaaS successfully via backend");
 
         } catch (e) {
           console.error("Auto upload failed", e);

@@ -62,21 +62,16 @@ async function startServer() {
   app.post("/api/upload/direct-token", (req, res) => proxyRequest(req, res, "/api/upload/direct-token"));
   app.post("/api/upload/commit", (req, res) => proxyRequest(req, res, "/api/upload/commit"));
 
-  app.post("/api/upload-result", async (req, res) => {
+  app.post("/api/upload-result", express.raw({ limit: '50mb', type: ['image/jpeg', 'image/png', 'application/octet-stream'] }), async (req, res) => {
     try {
-      const userId = req.query.userId as string;
-      const toolId = req.query.toolId as string;
+      const { userId, toolId } = req.query;
       if (!userId || !toolId) {
         return res.status(400).json({ success: false, error: 'Missing userId or toolId' });
       }
 
-      const chunks: any[] = [];
-      req.on('data', chunk => chunks.push(chunk));
-      await new Promise(resolve => req.on('end', resolve));
-      const imageBuffer = Buffer.concat(chunks);
-
-      if (imageBuffer.length === 0) {
-        return res.status(400).json({ success: false, error: 'Empty body' });
+      const imageBuffer = req.body;
+      if (!Buffer.isBuffer(imageBuffer) || imageBuffer.length === 0) {
+        return res.status(400).json({ success: false, error: 'Request body must be binary image data' });
       }
 
       const SAAS_ORIGIN = process.env.SAAS_ORIGIN || 'https://aibigtree.com';
