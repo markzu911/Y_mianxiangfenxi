@@ -24,7 +24,8 @@ async function startServer() {
     return new GoogleGenAI({ apiKey });
   };
 
-  app.use(express.json({ limit: '20mb' }));
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
   app.use((req, res, next) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -58,6 +59,64 @@ async function startServer() {
   app.post("/api/tool/launch", (req, res) => proxyRequest(req, res, "/api/tool/launch"));
   app.post("/api/tool/verify", (req, res) => proxyRequest(req, res, "/api/tool/verify"));
   app.post("/api/tool/consume", (req, res) => proxyRequest(req, res, "/api/tool/consume"));
+
+  app.post("/api/upload-result", async (req, res) => {
+    try {
+      const { imageBase64, userId, toolId } = req.body;
+      if (!imageBase64 || !userId || !toolId) {
+        return res.status(400).json({ success: false, error: 'Missing parameters' });
+      }
+
+      const SAAS_ORIGIN = 'http://aibigtree.com';
+      const base64Data = imageBase64.replace(/^data:image\/\w+;base64,/, "");
+      const imageBuffer = Buffer.from(base64Data, 'base64');
+      
+      // 1. direct-token
+      const tokenRes = await axios.post(`${SAAS_ORIGIN}/api/upload/direct-token`, {
+        userId,
+        toolId,
+        source: 'result',
+        mimeType: 'image/jpeg',
+        fileName: 'report.jpg',
+        fileSize: imageBuffer.byteLength
+      });
+      
+      const token = tokenRes.data;
+      if (!token || !token.success) {
+         throw new Error(token?.error || "获取 token 失败");
+      }
+
+      // 2. PUT to OSS
+      const uploadRes = await fetch(token.uploadUrl, {
+        method: token.method || 'PUT',
+        headers: token.headers,
+        body: imageBuffer
+      });
+      
+      if (!uploadRes.ok) {
+         throw new Error(`OSS 上传失败: ${uploadRes.status}`);
+      }
+
+      // 3. commit
+      const commitRes = await axios.post(`${SAAS_ORIGIN}/api/upload/commit`, {
+        userId,
+        toolId,
+        source: 'result',
+        objectKey: token.objectKey,
+        fileSize: imageBuffer.byteLength
+      });
+
+      const commit = commitRes.data;
+      if (!commit.success || !commit.savedToRecords) {
+        throw new Error(commit.error || '图片入库失败');
+      }
+
+      res.json({ success: true, image: commit.image });
+    } catch (error: any) {
+      console.error("Upload Result Error:", error.response?.data || error.message);
+      res.status(500).json({ success: false, error: error.message || "上传失败" });
+    }
+  });
 
   app.post("/api/generate", async (req, res) => {
     try {

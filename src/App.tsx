@@ -33,6 +33,40 @@ export default function App() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const reportRef = useRef<HTMLDivElement>(null);
+  const hasUploadedRef = useRef(false);
+
+  useEffect(() => {
+    hasUploadedRef.current = false;
+  }, [result]);
+
+  useEffect(() => {
+    if (result && !isAnalyzing && reportRef.current && saasUserId && saasToolId && !hasUploadedRef.current) {
+      hasUploadedRef.current = true;
+      const timer = setTimeout(async () => {
+        try {
+          const imageBase64 = await toPng(reportRef.current!, {
+             quality: 0.85,
+             pixelRatio: window.devicePixelRatio > 1 ? 2 : 1,
+             backgroundColor: '#f5f5f0'
+          });
+
+          await fetch('/api/upload-result', {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({
+                 imageBase64,
+                 userId: saasUserId,
+                 toolId: saasToolId
+             })
+          });
+        } catch (e) {
+          console.error("Auto upload failed", e);
+          hasUploadedRef.current = false;
+        }
+      }, 800); // Slight delay for fonts/images to fully render
+      return () => clearTimeout(timer);
+    }
+  }, [result, isAnalyzing, saasUserId, saasToolId]);
 
   useEffect(() => {
     const handleMessage = (event: MessageEvent) => {
