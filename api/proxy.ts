@@ -18,7 +18,7 @@ app.use((req, res, next) => {
 });
 
 const proxyRequest = async (req: express.Request, res: express.Response, targetPath: string) => {
-  const targetUrl = `https://aibigtree.com${targetPath}`;
+  const targetUrl = `http://aibigtree.com${targetPath}`;
   try {
     const response = await axios({
       method: req.method,
