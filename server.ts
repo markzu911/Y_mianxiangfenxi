@@ -58,6 +58,72 @@ async function startServer() {
   app.post("/api/tool/launch", (req, res) => proxyRequest(req, res, "/api/tool/launch"));
   app.post("/api/tool/verify", (req, res) => proxyRequest(req, res, "/api/tool/verify"));
   app.post("/api/tool/consume", (req, res) => proxyRequest(req, res, "/api/tool/consume"));
+  app.post("/api/upload/direct-token", (req, res) => proxyRequest(req, res, "/api/upload/direct-token"));
+  app.post("/api/upload/commit", (req, res) => proxyRequest(req, res, "/api/upload/commit"));
+
+  app.post("/api/upload-report", async (req, res) => {
+    try {
+      const { imageBase64, userId, toolId } = req.body;
+      if (!imageBase64 || !userId || !toolId) {
+        return res.status(400).json({ error: 'Missing required parameters' });
+      }
+
+      const SAAS_ORIGIN = "http://aibigtree.com";
+      const imageBuffer = Buffer.from(imageBase64, 'base64');
+      const fileName = `report_${Date.now()}.png`;
+      const mimeType = "image/png";
+
+      // 1. Consume
+      const consumeRes = await axios.post(`${SAAS_ORIGIN}/api/tool/consume`, { userId, toolId });
+      if (!consumeRes.data.success) {
+        throw new Error(consumeRes.data.error || consumeRes.data.message || '扣费失败');
+      }
+
+      // 2. Direct Token
+      const tokenRes = await axios.post(`${SAAS_ORIGIN}/api/upload/direct-token`, {
+        userId,
+        toolId,
+        source: 'result',
+        mimeType,
+        fileName,
+        fileSize: imageBuffer.length
+      });
+      const token = tokenRes.data;
+      if (!token.success) {
+        throw new Error(token.error || '获取直传 Token 失败');
+      }
+
+      // 3. PUT to OSS
+      await axios.put(token.uploadUrl, imageBuffer, {
+        headers: { 'Content-Type': mimeType }
+      });
+
+      // 4. Commit
+      const commitRes = await axios.post(`${SAAS_ORIGIN}/api/upload/commit`, {
+        userId,
+        toolId,
+        source: 'result',
+        objectKey: token.objectKey,
+        fileSize: imageBuffer.length
+      });
+
+      if (!commitRes.data.success || !commitRes.data.savedToRecords) {
+        throw new Error(commitRes.data.error || '图片入库失败');
+      }
+
+      res.json({
+        success: true,
+        image: {
+          ...commitRes.data.image,
+          currentIntegral: consumeRes.data.data?.currentIntegral
+        }
+      });
+
+    } catch (error: any) {
+      console.error("Upload Report Error:", error.message);
+      res.status(500).json({ success: false, error: error.message || "上传报告图失败" });
+    }
+  });
 
   app.post("/api/generate", async (req, res) => {
     try {

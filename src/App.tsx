@@ -175,22 +175,7 @@ export default function App() {
         setError(data.invalidReason || "未检测到有效的人脸，请重新上传清晰的正面人脸照片。");
       } else {
         setResult(data);
-        
-        // SaaS Consume Integration
-        if (saasUserId && saasToolId) {
-          fetch('/api/tool/consume', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: saasUserId, toolId: saasToolId })
-          })
-          .then(res => res.json())
-          .then(data => {
-            if (data?.success && data?.data?.currentIntegral !== undefined) {
-              setIntegral(data.data.currentIntegral);
-            }
-          })
-          .catch(console.error);
-        }
+        // Automatic upload logic triggered by result state
       }
     } catch (err) {
       console.error(err);
@@ -199,6 +184,55 @@ export default function App() {
       setIsAnalyzing(false);
     }
   };
+
+  // Automatic Report Upload Logic
+  useEffect(() => {
+    const uploadReport = async () => {
+      if (result && saasUserId && saasToolId && reportRef.current) {
+        // Wait for rendering
+        await new Promise(resolve => setTimeout(resolve, 800));
+        
+        try {
+          const url = await toPng(reportRef.current, {
+            quality: 0.9,
+            pixelRatio: 1.5, // Slightly lower for faster upload
+            backgroundColor: '#f5f5f0',
+            filter: (node) => {
+              // Always show pitch in the SaaS preserved image (marketing copy)
+              return true;
+            }
+          });
+
+          const base64 = url.split(',')[1];
+          
+          const response = await fetch('/api/upload-report', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              imageBase64: base64,
+              userId: saasUserId,
+              toolId: saasToolId
+            })
+          });
+          
+          const data = await response.json();
+          if (data.success) {
+            console.log("Report uploaded and saved:", data.image.url);
+            // Update integral after backend consume
+            if (data.image?.currentIntegral !== undefined) {
+               setIntegral(data.image.currentIntegral);
+            }
+          }
+        } catch (err) {
+          console.error("Auto upload failed:", err);
+        }
+      }
+    };
+
+    if (result) {
+      uploadReport();
+    }
+  }, [result, saasUserId, saasToolId]);
 
   const reset = () => {
     setImage(null);
@@ -237,35 +271,35 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center py-12 px-4 sm:px-6 lg:px-8 relative">
+    <div className="min-h-screen flex flex-col items-center py-8 sm:py-12 px-4 sm:px-6 lg:px-8 relative">
       {/* SaaS Integral Display */}
       {integral !== null && (
-        <div className="absolute top-6 right-6 bg-white/80 backdrop-blur-sm px-4 py-2 rounded-full shadow-sm border border-olive/10 flex items-center gap-2 z-10 hidden sm:flex">
-          <Sparkles className="w-4 h-4 text-olive" />
-          <span className="text-sm font-medium text-olive-dark">积分余额: </span>
-          <span className="text-sm font-bold text-olive">{integral}</span>
+        <div className="absolute top-4 sm:top-6 right-4 sm:right-6 bg-white/80 backdrop-blur-sm px-3 sm:px-4 py-1.5 sm:py-2 rounded-full shadow-sm border border-olive/10 flex items-center gap-2 z-10 hidden sm:flex">
+          <Sparkles className="w-3.5 h-3.5 sm:w-4 h-4 text-olive" />
+          <span className="text-xs sm:text-sm font-medium text-olive-dark">积分余额: </span>
+          <span className="text-xs sm:text-sm font-bold text-olive">{integral}</span>
         </div>
       )}
       
       {integral !== null && (
-        <div className="sm:hidden w-full max-w-4xl text-right mb-4 pr-2">
-           <span className="text-xs font-medium text-olive-dark bg-white/80 px-3 py-1 rounded-full border border-olive/10">积分: <span className="font-bold">{integral}</span></span>
+        <div className="sm:hidden w-full max-w-4xl text-right mb-4 pr-1">
+           <span className="text-[10px] sm:text-xs font-medium text-olive-dark bg-white/80 px-2 sm:px-3 py-1 rounded-full border border-olive/10 backdrop-blur-sm">积分: <span className="font-bold">{integral}</span></span>
         </div>
       )}
       
       <div className="w-full max-w-4xl">
         {/* Header */}
-        <div className="text-center mb-12">
-          <h1 className="text-4xl sm:text-5xl font-serif font-medium text-ink mb-4">
+        <div className="text-center mb-8 sm:mb-12">
+          <h1 className="text-3xl sm:text-4xl md:text-5xl font-serif font-medium text-ink mb-3 sm:mb-4 px-2">
             东方美学 · 面相解析
           </h1>
-          <p className="text-lg text-olive-dark font-light max-w-xl mx-auto">
+          <p className="text-sm sm:text-lg text-olive-dark font-light max-w-xl mx-auto px-4">
             上传您的面部照片，AI将为您解读面相密码，定制专属开运眉形。
           </p>
         </div>
 
         {/* Main Content */}
-        <div className="card p-8 sm:p-12 relative overflow-hidden min-h-[500px] flex flex-col justify-center mb-8">
+        <div className="card p-5 sm:p-8 md:p-12 relative overflow-hidden min-h-[400px] sm:min-h-[500px] flex flex-col justify-center mb-8">
           <AnimatePresence mode="wait">
             {!image ? (
               <motion.div
@@ -276,12 +310,12 @@ export default function App() {
                 className="flex flex-col items-center justify-center py-12"
               >
                 <div 
-                  className="w-64 h-80 rounded-[9999px] border-2 border-dashed border-olive/30 flex flex-col items-center justify-center cursor-pointer hover:bg-olive/5 transition-colors mb-8"
+                  className="w-48 h-60 sm:w-64 sm:h-80 rounded-[9999px] border-2 border-dashed border-olive/30 flex flex-col items-center justify-center cursor-pointer hover:bg-olive/5 transition-colors mb-6 sm:mb-8 p-4 text-center"
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  <Camera className="w-12 h-12 text-olive mb-4" strokeWidth={1.5} />
-                  <span className="text-olive-dark font-medium">点击上传正面照</span>
-                  <span className="text-sm text-olive/60 mt-2">支持 JPG, PNG, WebP, BMP 等常见格式，最大 20MB</span>
+                  <Camera className="w-8 h-8 sm:w-12 sm:h-12 text-olive mb-3 sm:mb-4" strokeWidth={1.5} />
+                  <span className="text-sm sm:text-base text-olive-dark font-medium">点击上传正面照</span>
+                  <span className="text-[10px] sm:text-sm text-olive/60 mt-2">支持常见格式，最大 20MB</span>
                 </div>
                 <input 
                   type="file" 
@@ -299,21 +333,21 @@ export default function App() {
                 exit={{ opacity: 0, scale: 1.05 }}
                 className="flex flex-col items-center"
               >
-                <div className="relative mb-8">
-                  <img src={image} alt="Uploaded face" className="w-64 h-80 pill-image shadow-lg" />
+                <div className="relative mb-6 sm:mb-8">
+                  <img src={image} alt="Uploaded face" className="w-48 h-60 sm:w-64 sm:h-80 pill-image shadow-lg" />
                   {isAnalyzing && (
                     <div className="absolute inset-0 bg-warm-white/40 backdrop-blur-sm rounded-[9999px] flex items-center justify-center">
-                      <Loader2 className="w-12 h-12 text-olive animate-spin" />
+                      <Loader2 className="w-10 h-10 sm:w-12 sm:h-12 text-olive animate-spin" />
                     </div>
                   )}
                 </div>
                 
                 {error && (
-                  <div className="flex flex-col items-center gap-4">
-                    <div className="text-red-500 mb-2 text-center max-w-md bg-red-50 p-4 rounded-xl border border-red-100">
+                  <div className="flex flex-col items-center gap-4 px-2">
+                    <div className="text-red-500 mb-2 text-center max-w-md bg-red-50 p-4 rounded-xl border border-red-100 text-sm sm:text-base">
                       <p className="font-medium">{error}</p>
                     </div>
-                    <button onClick={reset} className="px-6 py-3 rounded-full border border-olive text-olive hover:bg-olive/5 transition-colors flex items-center gap-2">
+                    <button onClick={reset} className="px-5 py-2.5 sm:px-6 sm:py-3 rounded-full border border-olive text-olive hover:bg-olive/5 transition-colors flex items-center gap-2 text-sm sm:text-base">
                       <RefreshCcw className="w-4 h-4" />
                       重新上传照片
                     </button>
@@ -321,19 +355,19 @@ export default function App() {
                 )}
 
                 {!isAnalyzing && !error && (
-                  <div className="flex gap-4">
-                    <button onClick={reset} className="px-6 py-3 rounded-full border border-olive text-olive hover:bg-olive/5 transition-colors">
+                  <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 w-full sm:w-auto px-6 sm:px-0">
+                    <button onClick={reset} className="px-6 py-2.5 sm:py-3 rounded-full border border-olive text-olive hover:bg-olive/5 transition-colors text-sm sm:text-base">
                       重新上传
                     </button>
-                    <button onClick={analyzeFace} className="olive-button flex items-center gap-2">
-                      <Sparkles className="w-5 h-5" />
+                    <button onClick={analyzeFace} className="olive-button flex items-center justify-center gap-2 text-sm sm:text-base py-2.5 sm:py-3">
+                      <Sparkles className="w-4 h-4 sm:w-5 sm:h-5" />
                       开始解析面相
                     </button>
                   </div>
                 )}
                 
                 {isAnalyzing && (
-                  <p className="text-olive-dark font-serif text-xl animate-pulse">
+                  <p className="text-olive-dark font-serif text-lg sm:text-xl animate-pulse text-center px-4">
                     正在解读您的面相密码...
                   </p>
                 )}
@@ -348,108 +382,108 @@ export default function App() {
                 {/* The Report Container */}
                 <div 
                   ref={reportRef}
-                  className="w-full bg-[#f5f5f0] p-8 sm:p-12 rounded-none sm:rounded-3xl border-x-0 sm:border border-olive/20 shadow-none sm:shadow-2xl relative overflow-hidden"
+                  className="w-full bg-[#f5f5f0] p-5 sm:p-8 md:p-12 rounded-2xl sm:rounded-3xl border sm:border-olive/20 shadow-none sm:shadow-2xl relative overflow-hidden"
                 >
                   {/* Decorative Header Line */}
-                  <div className="absolute top-0 left-0 w-full h-2 bg-olive"></div>
+                  <div className="absolute top-0 left-0 w-full h-1.5 sm:h-2 bg-olive"></div>
                   
                   {/* Report Header */}
-                  <div className="text-center mb-10 mt-4">
-                    <h2 className="text-3xl font-serif text-olive-dark tracking-widest mb-2">专属面相解析报告</h2>
-                    <p className="text-olive/60 text-sm tracking-widest uppercase">Oriental Aesthetics Report</p>
+                  <div className="text-center mb-8 sm:mb-10 mt-2 sm:mt-4">
+                    <h2 className="text-xl sm:text-3xl font-serif text-olive-dark tracking-[0.2em] sm:tracking-widest mb-1 sm:mb-2">专属面相解析报告</h2>
+                    <p className="text-olive/60 text-[10px] sm:text-sm tracking-widest uppercase">Oriental Aesthetics Report</p>
                   </div>
 
-                  <div className="flex flex-col md:flex-row gap-8 mb-8">
+                  <div className="flex flex-col md:flex-row gap-6 sm:gap-8 mb-6 sm:mb-8">
                     {/* Photo & Summary */}
                     <div className="w-full md:w-1/3 flex flex-col items-center">
-                      <img src={image} alt="Analyzed face" className="w-48 h-60 object-cover rounded-[9999px] shadow-lg mb-6 border-4 border-white" />
+                      <img src={image} alt="Analyzed face" className="w-40 h-52 sm:w-48 sm:h-60 object-cover rounded-[9999px] shadow-lg mb-4 sm:mb-6 border-4 border-white" />
                     </div>
                     
-                    <div className="w-full md:w-2/3 flex flex-col justify-center">
-                      <h3 className="text-2xl font-serif text-olive-dark mb-4 leading-tight">
+                    <div className="w-full md:w-2/3 flex flex-col justify-center text-center md:text-left">
+                      <h3 className="text-xl sm:text-2xl font-serif text-olive-dark mb-4 leading-tight">
                         "{result.fortuneSummary}"
                       </h3>
-                      <div className="h-px w-16 bg-olive/30 mb-6"></div>
+                      <div className="h-px w-12 sm:w-16 bg-olive/30 mb-5 sm:mb-6 mx-auto md:ml-0"></div>
                       
-                      <div className="space-y-6">
-                        <div className="bg-white/50 p-4 rounded-xl border border-olive/10">
-                          <h4 className="text-xs font-bold text-olive uppercase tracking-widest mb-2">AI 视觉特征提取</h4>
-                          <p className="text-ink/70 leading-relaxed text-sm italic">"{result.objectiveFeatures}"</p>
+                      <div className="space-y-4 sm:space-y-6">
+                        <div className="bg-white/50 p-3 sm:p-4 rounded-xl border border-olive/10">
+                          <h4 className="text-[10px] sm:text-xs font-bold text-olive uppercase tracking-widest mb-1.5 sm:mb-2">AI 视觉特征提取</h4>
+                          <p className="text-ink/70 leading-relaxed text-xs sm:text-sm italic">"{result.objectiveFeatures}"</p>
                         </div>
                         <div>
-                          <h4 className="text-xs font-bold text-olive uppercase tracking-widest mb-2">面相骨相</h4>
-                          <p className="text-ink/80 leading-relaxed text-sm">{result.facialAnalysis}</p>
+                          <h4 className="text-[10px] sm:text-xs font-bold text-olive uppercase tracking-widest mb-1.5 sm:mb-2">面相骨相</h4>
+                          <p className="text-ink/80 leading-relaxed text-xs sm:text-sm">{result.facialAnalysis}</p>
                         </div>
                         <div>
-                          <h4 className="text-xs font-bold text-olive uppercase tracking-widest mb-2">眉眼玄机</h4>
-                          <p className="text-ink/80 leading-relaxed text-sm">{result.eyebrowAnalysis}</p>
+                          <h4 className="text-[10px] sm:text-xs font-bold text-olive uppercase tracking-widest mb-1.5 sm:mb-2">眉眼玄机</h4>
+                          <p className="text-ink/80 leading-relaxed text-xs sm:text-sm">{result.eyebrowAnalysis}</p>
                         </div>
                       </div>
                     </div>
                   </div>
 
                   {/* Luck Issue & Solution */}
-                  <div className="bg-olive/5 p-6 rounded-2xl border border-olive/10 mb-8">
-                    <h4 className="text-xs font-bold text-olive uppercase tracking-widest mb-2">运势诊断</h4>
-                    <p className="text-olive-dark leading-relaxed text-sm font-medium">{result.luckIssue}</p>
+                  <div className="bg-olive/5 p-4 sm:p-6 rounded-xl sm:rounded-2xl border border-olive/10 mb-6 sm:mb-8">
+                    <h4 className="text-[10px] sm:text-xs font-bold text-olive uppercase tracking-widest mb-1.5 sm:mb-2">运势诊断</h4>
+                    <p className="text-olive-dark leading-relaxed text-xs sm:text-sm font-medium">{result.luckIssue}</p>
                   </div>
 
-                  <div className="pt-6 border-t border-olive/10">
-                    <h3 className="text-sm font-bold text-olive uppercase tracking-widest mb-4 flex items-center gap-2">
-                      <Sparkles className="w-4 h-4" />
+                  <div className="pt-5 sm:pt-6 border-t border-olive/10">
+                    <h3 className="text-[10px] sm:text-sm font-bold text-olive uppercase tracking-widest mb-4 flex items-center justify-center md:justify-start gap-2">
+                      <Sparkles className="w-3.5 h-3.5 sm:w-4 h-4" />
                       专属开运方案
                     </h3>
-                    <div className="bg-olive text-white p-6 rounded-2xl shadow-md">
+                    <div className="bg-olive text-white p-5 sm:p-6 rounded-xl sm:rounded-2xl shadow-md">
                       {result.recommendedProjects && result.recommendedProjects.length > 0 && (
-                        <div className="flex flex-wrap gap-2 mb-4">
+                        <div className="flex flex-wrap gap-1.5 sm:gap-2 mb-3 sm:mb-4 justify-center md:justify-start">
                           {result.recommendedProjects.map((proj, idx) => (
-                            <span key={idx} className="bg-white/20 text-white px-3 py-1 rounded-full text-xs font-medium border border-white/30">
+                            <span key={idx} className="bg-white/20 text-white px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full text-[10px] sm:text-xs font-medium border border-white/30">
                               {proj}
                             </span>
                           ))}
                         </div>
                       )}
-                      <p className="font-serif text-lg leading-relaxed">{result.suggestedSolution}</p>
+                      <p className="font-serif text-base sm:text-lg leading-relaxed text-center md:text-left">{result.suggestedSolution}</p>
                       
-                      <div id="beautician-pitch" className="bg-white/10 p-4 rounded-xl mt-6">
-                        <p className="text-xs font-bold text-white/70 uppercase tracking-widest mb-2">美业顾问诊断建议</p>
-                        <p className="text-white/90 text-sm leading-relaxed italic">"{result.beauticianPitch}"</p>
+                      <div id="beautician-pitch" className="bg-white/10 p-3 sm:p-4 rounded-xl mt-5 sm:mt-6">
+                        <p className="text-[10px] font-bold text-white/70 uppercase tracking-widest mb-1.5 sm:mb-2">美业顾问诊断建议</p>
+                        <p className="text-white/90 text-xs sm:text-sm leading-relaxed italic">"{result.beauticianPitch}"</p>
                       </div>
                     </div>
                   </div>
 
                   {/* Report Footer */}
-                  <div className="mt-12 pt-6 border-t border-olive/20 flex justify-between items-end">
-                    <div className="text-olive/50 text-xs font-serif space-y-1">
+                  <div className="mt-8 sm:mt-12 pt-5 sm:pt-6 border-t border-olive/20 flex justify-between items-end">
+                    <div className="text-olive/50 text-[10px] sm:text-xs font-serif space-y-1">
                       <p>仅供娱乐参考 · 发现更美的自己</p>
                       <p>生成时间: {new Date().toLocaleDateString()}</p>
                     </div>
-                    <div className="text-[#c93a3a] border-2 border-[#c93a3a] rounded px-2 py-1 text-xs font-bold font-serif transform -rotate-12 opacity-80 select-none">
+                    <div className="text-[#c93a3a] border-2 border-[#c93a3a] rounded px-1.5 py-0.5 sm:px-2 sm:py-1 text-[10px] sm:text-xs font-bold font-serif transform -rotate-12 opacity-80 select-none">
                       东方美学<br/>专属定制
                     </div>
                   </div>
                 </div>
 
                 {/* Actions (Outside Report) */}
-                <div className="flex flex-col items-center gap-6 mt-8">
-                  <label className="flex items-center gap-2 text-sm text-olive-dark cursor-pointer bg-olive/5 px-4 py-2 rounded-full border border-olive/10 hover:bg-olive/10 transition-colors">
+                <div className="flex flex-col items-center gap-5 sm:gap-6 mt-6 sm:mt-8 w-full px-2">
+                  <label className="flex items-center gap-3 text-xs sm:text-sm text-olive-dark cursor-pointer bg-olive/5 px-4 py-2.5 rounded-xl sm:rounded-full border border-olive/10 hover:bg-olive/10 transition-colors w-full sm:w-auto text-center sm:text-left">
                     <input 
                       type="checkbox" 
                       checked={hidePitchInExport} 
                       onChange={(e) => setHidePitchInExport(e.target.checked)}
-                      className="w-4 h-4 rounded border-olive/30 text-olive focus:ring-olive accent-olive"
+                      className="w-4 h-4 rounded border-olive/30 text-olive focus:ring-olive accent-olive flex-shrink-0"
                     />
-                    导出图片时隐藏「美业顾问诊断建议」（适合发给客户）
+                    <span>导出图片时隐藏「美业顾问诊断建议」</span>
                   </label>
-                  <div className="flex gap-4">
-                    <button onClick={reset} className="px-6 py-3 rounded-full border border-olive text-olive hover:bg-olive/5 transition-colors flex items-center gap-2">
+                  <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 w-full sm:w-auto">
+                    <button onClick={reset} className="px-6 py-2.5 sm:py-3 rounded-full border border-olive text-olive hover:bg-olive/5 transition-colors flex items-center justify-center gap-2 text-sm sm:text-base order-2 sm:order-1">
                       <RefreshCcw className="w-4 h-4" />
                       重新测试
                     </button>
                     <button 
                       onClick={exportToImage} 
                       disabled={isExporting}
-                      className="olive-button flex items-center gap-2 disabled:opacity-70"
+                      className="olive-button flex items-center justify-center gap-2 text-sm sm:text-base py-2.5 sm:py-3 disabled:opacity-70 order-1 sm:order-2"
                     >
                       {isExporting ? <Loader2 className="w-5 h-5 animate-spin" /> : <Download className="w-5 h-5" />}
                       {isExporting ? '生成中...' : '一键导出报告'}

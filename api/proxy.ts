@@ -35,5 +35,7 @@ const proxyRequest = async (req: express.Request, res: express.Response, targetP
 app.post("/api/tool/launch", (req, res) => proxyRequest(req, res, "/api/tool/launch"));
 app.post("/api/tool/verify", (req, res) => proxyRequest(req, res, "/api/tool/verify"));
 app.post("/api/tool/consume", (req, res) => proxyRequest(req, res, "/api/tool/consume"));
+app.post("/api/upload/direct-token", (req, res) => proxyRequest(req, res, "/api/upload/direct-token"));
+app.post("/api/upload/commit", (req, res) => proxyRequest(req, res, "/api/upload/commit"));
 
 export default app;
