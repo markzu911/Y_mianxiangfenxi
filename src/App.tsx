@@ -50,15 +50,56 @@ export default function App() {
              backgroundColor: '#f5f5f0'
           });
 
-          await fetch('/api/upload-result', {
+          // Convert to Blob
+          const resBlob = await fetch(imageBase64);
+          const blob = await resBlob.blob();
+
+          // 1. Get token
+          const tokenRes = await fetch('/api/upload/direct-token', {
              method: 'POST',
              headers: { 'Content-Type': 'application/json' },
              body: JSON.stringify({
-                 imageBase64,
                  userId: saasUserId,
-                 toolId: saasToolId
+                 toolId: saasToolId,
+                 source: 'result',
+                 mimeType: 'image/jpeg',
+                 fileName: 'report.jpg',
+                 fileSize: blob.size
              })
           });
+          const tokenData = await tokenRes.json();
+          if (!tokenData.success) {
+            throw new Error(tokenData.error || tokenData.message || '获取上传地址失败');
+          }
+
+          // 2. PUT OSS
+          const uploadRes = await fetch(tokenData.uploadUrl, {
+            method: tokenData.method || 'PUT',
+            headers: tokenData.headers,
+            body: blob
+          });
+          if (!uploadRes.ok) {
+            throw new Error(`OSS上传失败: ${uploadRes.status}`);
+          }
+
+          // 3. Commit
+          const commitRes = await fetch('/api/upload/commit', {
+             method: 'POST',
+             headers: { 'Content-Type': 'application/json' },
+             body: JSON.stringify({
+                 userId: saasUserId,
+                 toolId: saasToolId,
+                 source: 'result',
+                 objectKey: tokenData.objectKey,
+                 fileSize: blob.size
+             })
+          });
+          const commitData = await commitRes.json();
+          if (!commitData.success || !commitData.savedToRecords) {
+            throw new Error(commitData.error || '上传确认失败');
+          }
+          console.log("Image saved to SaaS successfully");
+
         } catch (e) {
           console.error("Auto upload failed", e);
           hasUploadedRef.current = false;
