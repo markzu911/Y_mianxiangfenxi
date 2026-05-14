@@ -52,49 +52,19 @@ export default function App() {
 
           if (!blob) throw new Error("Failed to generate blob from report");
 
-          // 1. Get token
-          const tokenRes = await fetch('/api/upload/direct-token', {
+          // Upload to our backend using blob
+          const uploadRes = await fetch(`/api/upload-result?userId=${saasUserId}&toolId=${saasToolId}`, {
              method: 'POST',
-             headers: { 'Content-Type': 'application/json' },
-             body: JSON.stringify({
-                 userId: saasUserId,
-                 toolId: saasToolId,
-                 source: 'result',
-                 mimeType: 'image/jpeg',
-                 fileName: 'report.jpg',
-                 fileSize: blob.size
-             })
+             body: blob
           });
-          const tokenData = await tokenRes.json();
-          if (!tokenData.success) {
-            throw new Error(tokenData.error || tokenData.message || '获取上传地址失败');
-          }
-
-          // 2. PUT OSS
-          const uploadRes = await fetch(tokenData.uploadUrl, {
-            method: tokenData.method || 'PUT',
-            headers: tokenData.headers,
-            body: blob
-          });
+          
           if (!uploadRes.ok) {
-            throw new Error(`OSS上传失败: ${uploadRes.status}`);
+             throw new Error(`Upload API returned ${uploadRes.status}`);
           }
-
-          // 3. Commit
-          const commitRes = await fetch('/api/upload/commit', {
-             method: 'POST',
-             headers: { 'Content-Type': 'application/json' },
-             body: JSON.stringify({
-                 userId: saasUserId,
-                 toolId: saasToolId,
-                 source: 'result',
-                 objectKey: tokenData.objectKey,
-                 fileSize: blob.size
-             })
-          });
-          const commitData = await commitRes.json();
-          if (!commitData.success || !commitData.savedToRecords) {
-            throw new Error(commitData.error || '上传确认失败');
+          
+          const resultData = await uploadRes.json();
+          if (!resultData.success) {
+             throw new Error(resultData.error || '上传确认失败');
           }
           console.log("Image saved to SaaS successfully");
 
