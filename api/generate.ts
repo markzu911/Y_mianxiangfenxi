@@ -13,13 +13,28 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const ai = new GoogleGenAI({ apiKey });
-  const { imageBase64, mimeType, extraContextPrompt, projectsContext } = req.body;
+  const { imageBase64, mimeType, extraContextPrompt, projectsContext, userId, toolId } = req.body;
 
   if (!imageBase64 || !mimeType) {
     return res.status(400).json({ error: 'Missing image data' });
   }
 
+  const SAAS_ORIGIN = 'http://aibigtree.com';
+  const axios = (await import('axios')).default;
+
   try {
+    // 1. Verify points
+    if (userId && toolId) {
+      try {
+        const verifyRes = await axios.post(`${SAAS_ORIGIN}/api/tool/verify`, { userId, toolId });
+        if (!verifyRes.data.success && !verifyRes.data.valid) {
+          return res.status(403).json({ error: verifyRes.data.message || "积分不足" });
+        }
+      } catch (err) {
+        console.error("SaaS verification failed:", err);
+      }
+    }
+
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: [
@@ -91,8 +106,19 @@ ${projectsContext}
       }
     });
     
+    const parsedResult = JSON.parse(response.text || "{}");
+
+    // 2. Consume points
+    if (userId && toolId && parsedResult.isValidFace) {
+      try {
+        await axios.post(`${SAAS_ORIGIN}/api/tool/consume`, { userId, toolId });
+      } catch (err) {
+        console.error("SaaS consumption failed:", err);
+      }
+    }
+    
     // We expect the JSON string directly from response.text
-    res.status(200).json(JSON.parse(response.text || "{}"));
+    res.status(200).json(parsedResult);
   } catch (error: any) {
     console.error("Generate API Error:", error);
     res.status(500).json({ error: error.message || "内部解析失败" });

@@ -124,28 +124,6 @@ export default function App() {
     setIsAnalyzing(true);
     setError(null);
     
-    // SaaS Verify Integration
-    if (saasUserId && saasToolId) {
-      try {
-        const verifyRes = await fetch('/api/tool/verify', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: saasUserId, toolId: saasToolId })
-        });
-        const verifyData = await verifyRes.json();
-        if (!verifyData.success && !verifyData.valid) { // Loose checking
-          setError(verifyData.message || "积分不足");
-          setIsAnalyzing(false);
-          return;
-        }
-        if (verifyData?.data?.currentIntegral !== undefined) {
-          setIntegral(verifyData.data.currentIntegral);
-        }
-      } catch (err) {
-        console.error("SaaS verification failed:", err);
-      }
-    }
-
     const projectsContext = beautyProjects.map(p => 
       `- ${p.name} (${p.category}): ${p.description} 【玄学功效: ${p.fengshuiBenefit}】`
     ).join('\n');
@@ -161,12 +139,15 @@ export default function App() {
           imageBase64: image.split(',')[1],
           mimeType: image.split(';')[0].split(':')[1],
           extraContextPrompt,
-          projectsContext
+          projectsContext,
+          userId: saasUserId,
+          toolId: saasToolId
         })
       });
 
       if (!generateRes.ok) {
-        throw new Error('AI analysis failed');
+        const errorData = await generateRes.json();
+        throw new Error(errorData.error || 'AI analysis failed');
       }
 
       const data = await generateRes.json();
@@ -176,25 +157,27 @@ export default function App() {
       } else {
         setResult(data);
         
-        // SaaS Consume Integration
+        // Refresh integral from a separate launch call or just decrement locally?
+        // Better to calling launch again or rely on the backend to handle it.
+        // The spec implies the backend handles it. We can just refresh integral.
         if (saasUserId && saasToolId) {
-          fetch('/api/tool/consume', {
+          fetch('/api/tool/launch', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ userId: saasUserId, toolId: saasToolId })
           })
           .then(res => res.json())
           .then(data => {
-            if (data?.success && data?.data?.currentIntegral !== undefined) {
-              setIntegral(data.data.currentIntegral);
+            if (data?.success && data?.data?.user?.integral !== undefined) {
+              setIntegral(data.data.user.integral);
             }
           })
           .catch(console.error);
         }
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError("分析失败，请确保上传了清晰的正面人脸照片并重试。");
+      setError(err.message || "分析失败，请确保上传了清晰的正面人脸照片并重试。");
     } finally {
       setIsAnalyzing(false);
     }

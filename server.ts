@@ -61,9 +61,23 @@ async function startServer() {
 
   app.post("/api/generate", async (req, res) => {
     try {
-      const { imageBase64, mimeType, extraContextPrompt, projectsContext } = req.body;
+      const { imageBase64, mimeType, extraContextPrompt, projectsContext, userId, toolId } = req.body;
       if (!imageBase64 || !mimeType) {
         return res.status(400).json({ error: 'Missing image data' });
+      }
+
+      const SAAS_ORIGIN = 'http://aibigtree.com';
+
+      // 1. Verify points if SaaS info is provided
+      if (userId && toolId) {
+        try {
+          const verifyRes = await axios.post(`${SAAS_ORIGIN}/api/tool/verify`, { userId, toolId });
+          if (!verifyRes.data.success && !verifyRes.data.valid) {
+            return res.status(403).json({ error: verifyRes.data.message || "积分不足" });
+          }
+        } catch (err) {
+          console.error("SaaS verification failed:", err);
+        }
       }
 
       const ai = getAI();
@@ -137,7 +151,19 @@ ${projectsContext}
           }
         }
       });
-      res.json(JSON.parse(response.text || "{}"));
+      
+      const resultData = JSON.parse(response.text || "{}");
+
+      // 2. Consume points if analysis was successful and SaaS info is provided
+      if (userId && toolId && resultData.isValidFace) {
+        try {
+          await axios.post(`${SAAS_ORIGIN}/api/tool/consume`, { userId, toolId });
+        } catch (err) {
+          console.error("SaaS consumption failed:", err);
+        }
+      }
+
+      res.json(resultData);
     } catch (error: any) {
       console.error("Generate API Error:", error);
       res.status(500).json({ error: error.message || "内部解析失败" });
